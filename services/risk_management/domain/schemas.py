@@ -50,6 +50,8 @@ class PositionSizeResponse(BaseSchema):
 class RiskCheckRequest(BaseSchema):
     account_equity: float
     daily_pnl: float = 0.0
+    weekly_pnl: float = 0.0
+    monthly_pnl: float = 0.0
     current_drawdown_pct: float = 0.0
     open_positions: int = 0
     proposed_position_pct: float = 0.0
@@ -76,6 +78,8 @@ class RiskProfileCreate(BaseSchema):
     description: str | None = None
     max_position_size_pct: float = Field(default=0.02, gt=0, le=0.5)
     daily_loss_limit_pct: float = Field(default=0.05, gt=0, le=0.5)
+    weekly_loss_limit_pct: float = Field(default=0.06, gt=0, le=0.5)
+    monthly_loss_limit_pct: float = Field(default=0.10, gt=0, le=0.5)
     max_drawdown_pct: float = Field(default=0.15, gt=0, le=0.8)
     risk_per_trade_pct: float = Field(default=0.01, gt=0, le=0.1)
     max_open_positions: int = Field(default=10, gt=0, le=100)

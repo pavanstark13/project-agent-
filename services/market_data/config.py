@@ -10,6 +10,7 @@ class MarketDataSettings(Settings):
 
     service_name: str = "market-data"
     service_port: int = 8001
+    primary_data_provider: str = "yfinance"
 
     # WebSocket settings
     ws_ping_interval: int = 30

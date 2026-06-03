@@ -171,6 +171,29 @@ class BacktestEngine:
         total_return_pct = (capital - self.initial_capital) / self.initial_capital
         max_drawdown_pct = self._compute_max_drawdown(equity_curve)
         sharpe = self._compute_sharpe(equity_curve)
+        sortino = self._compute_sortino(equity_curve)
+
+        # CAGR calculation (assuming daily candles)
+        total_days = len(candles) / 252.0 if len(candles) > 0 else 1.0
+        cagr = (capital / self.initial_capital) ** (1.0 / total_days) - 1.0 if capital > 0 else -1.0
+
+        # Expectancy calculation
+        avg_win = np.mean([t["pnl"] for t in winning]) if winning else 0.0
+        avg_loss = abs(np.mean([t["pnl"] for t in losing])) if losing else 0.0
+        expectancy = (win_rate * avg_win) - ((1 - win_rate) * avg_loss)
+
+        # Strategy rejection check (Minimum Sharpe of 1.5, positive expectancy, and at least 5 trades)
+        strategy_approved = True
+        rejection_reasons = []
+        if sharpe < 1.5:
+            strategy_approved = False
+            rejection_reasons.append(f"Sharpe Ratio {sharpe:.2f} is below minimum requirement of 1.5")
+        if expectancy <= 0:
+            strategy_approved = False
+            rejection_reasons.append("Strategy expectancy is negative or zero")
+        if total_trades < 5:
+            strategy_approved = False
+            rejection_reasons.append(f"Total trades count ({total_trades}) is too low for statistical validity")
 
         return {
             "total_trades": total_trades,
@@ -180,9 +203,14 @@ class BacktestEngine:
             "total_return_pct": round(total_return_pct, 4),
             "max_drawdown_pct": round(max_drawdown_pct, 4),
             "sharpe_ratio": round(sharpe, 4),
+            "sortino_ratio": round(sortino, 4),
+            "cagr": round(cagr, 4),
+            "expectancy": round(expectancy, 2),
             "profit_factor": round(profit_factor, 4),
             "initial_capital": self.initial_capital,
             "final_capital": round(capital, 2),
+            "strategy_approved": strategy_approved,
+            "rejection_reasons": rejection_reasons,
         }
 
     def _compute_max_drawdown(self, equity_curve: list[float]) -> float:
@@ -201,3 +229,17 @@ class BacktestEngine:
         # Annualize (assuming daily bars)
         sharpe = (returns.mean() * 252 - risk_free) / (returns.std() * np.sqrt(252))
         return float(sharpe)
+
+    def _compute_sortino(self, equity_curve: list[float], risk_free: float = 0.02) -> float:
+        eq = np.array(equity_curve)
+        if len(eq) < 2:
+            return 0.0
+        returns = np.diff(eq) / eq[:-1]
+        downside_returns = returns[returns < 0]
+        if len(downside_returns) == 0:
+            return 0.0
+        downside_std = downside_returns.std()
+        if downside_std == 0:
+            return 0.0
+        sortino = (returns.mean() * 252 - risk_free) / (downside_std * np.sqrt(252))
+        return float(sortino)

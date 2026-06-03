@@ -1,0 +1,15 @@
+# Dockerfile for FastAPI API (multimodal ingestion & backtesting)
+FROM python:3.12-slim
+WORKDIR /app
+# Install system deps (ffmpeg for video processing, libgl1 for OpenCV)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    libgl1 && rm -rf /var/lib/apt/lists/*
+# Copy project files
+COPY . /app
+# Install python dependencies via pyproject.toml
+RUN pip install --no-cache-dir .
+# Expose API port (default 8000)
+EXPOSE 8000
+# Run the FastAPI server
+CMD ["uvicorn", "src.api:app", "--host", "0.0.0.0", "--port", "8000"]

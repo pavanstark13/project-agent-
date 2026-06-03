@@ -33,6 +33,11 @@ class BaseExecutionAdapter(ABC):
         """Disconnect from broker."""
         ...
 
+    @abstractmethod
+    async def liquidate_all(self) -> bool:
+        """Cancel all open orders and liquidate all open positions."""
+        ...
+
     @property
     @abstractmethod
     def name(self) -> str:

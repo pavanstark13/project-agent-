@@ -20,6 +20,8 @@ class RiskProfile(TimestampMixin, Base):
         Numeric(5, 4), nullable=False, default=0.02
     )
     daily_loss_limit_pct: Mapped[float] = mapped_column(Numeric(5, 4), nullable=False, default=0.05)
+    weekly_loss_limit_pct: Mapped[float] = mapped_column(Numeric(5, 4), nullable=False, default=0.06)
+    monthly_loss_limit_pct: Mapped[float] = mapped_column(Numeric(5, 4), nullable=False, default=0.10)
     max_drawdown_pct: Mapped[float] = mapped_column(Numeric(5, 4), nullable=False, default=0.15)
     risk_per_trade_pct: Mapped[float] = mapped_column(Numeric(5, 4), nullable=False, default=0.01)
     max_open_positions: Mapped[int] = mapped_column(nullable=False, default=10)

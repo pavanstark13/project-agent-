@@ -37,3 +37,9 @@ class OrderManager:
         result = await _adapter.cancel_order(external_order_id)
         logger.info("Order cancellation", external_id=external_order_id, success=result)
         return result
+
+    async def liquidate_all(self) -> bool:
+        await ensure_adapter()
+        result = await _adapter.liquidate_all()
+        logger.info("Emergency liquidation triggered", success=result)
+        return result

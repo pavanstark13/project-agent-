@@ -106,6 +106,18 @@ class AlpacaExecutionAdapter(BaseExecutionAdapter):
             logger.error("Failed to cancel order", error=str(e))
             return False
 
+    async def liquidate_all(self) -> bool:
+        if self._client is None:
+            logger.info("Simulating liquidation of all open orders and positions")
+            return True
+        try:
+            self._client.close_all_positions(cancel_orders=True)
+            logger.info("Alpaca liquidation command executed successfully")
+            return True
+        except Exception as e:
+            logger.error("Alpaca liquidation failed", error=str(e))
+            return False
+
     async def get_order_status(self, external_order_id: str) -> OrderResponse:
         if self._client is None:
             raise NotImplementedError("No client available")

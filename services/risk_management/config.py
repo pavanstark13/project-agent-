@@ -11,7 +11,10 @@ class RiskManagementSettings(Settings):
     default_risk_per_trade: float = 0.01
     default_max_position_pct: float = 0.05
     default_daily_loss_limit: float = 0.03
+    default_weekly_loss_limit: float = 0.06
+    default_monthly_loss_limit: float = 0.10
     default_max_drawdown: float = 0.15
+    default_max_open_positions: int = 10
 
 
 @lru_cache

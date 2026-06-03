@@ -1,7 +1,8 @@
 """Risk Management API endpoints."""
 
 import structlog
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.risk_management.domain.schemas import (
     DrawdownStatus,
@@ -13,14 +14,23 @@ from services.risk_management.domain.schemas import (
 from services.risk_management.services.drawdown_monitor import DrawdownMonitor
 from services.risk_management.services.loss_limiter import LossLimiter
 from services.risk_management.services.position_sizer import PositionSizer
+from shared.database import get_db
 from shared.exceptions import ValidationError
 
 router = APIRouter()
 logger = structlog.get_logger(__name__)
 
+settings = get_settings()
 _position_sizer = PositionSizer()
 _drawdown_monitor = DrawdownMonitor()
-_loss_limiter = LossLimiter()
+_loss_limiter = LossLimiter(
+    daily_loss_limit_pct=settings.default_daily_loss_limit,
+    weekly_loss_limit_pct=settings.default_weekly_loss_limit,
+    monthly_loss_limit_pct=settings.default_monthly_loss_limit,
+    max_drawdown_pct=settings.default_max_drawdown,
+    max_open_positions=settings.default_max_open_positions,
+    max_position_size_pct=settings.default_max_position_pct,
+)
 
 
 @router.post("/position-size", response_model=PositionSizeResponse)
@@ -36,9 +46,12 @@ async def calculate_position_size(request: PositionSizeRequest) -> PositionSizeR
 
 
 @router.post("/check", response_model=RiskCheckResponse)
-async def check_trade_risk(request: RiskCheckRequest) -> RiskCheckResponse:
+async def check_trade_risk(
+    request: RiskCheckRequest,
+    db: AsyncSession = Depends(get_db),
+) -> RiskCheckResponse:
     """Check if a trade meets risk criteria."""
-    return await _loss_limiter.check_trade_allowed(request)
+    return await _loss_limiter.check_trade_allowed(request, db)
 
 
 @router.get("/drawdown/{equity}", response_model=DrawdownStatus)
