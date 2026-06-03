@@ -16,9 +16,14 @@ def run_backtest(signal: List[float]) -> Dict:
     # Use vectorbt to compute portfolio
     portfolio = vbt.Portfolio.from_signals(price, entries, exits, freq='1D')
     stats = portfolio.stats()
+    # vectorbt stats() returns a Series with human-readable keys
+    def _get(key, fallback=0.0):
+        val = stats.get(key, fallback)
+        return float(val) if hasattr(val, '__float__') else fallback
     return {
-        "total_return": stats['total_return'].item(),
-        "sharpe": stats['sharpe'].item(),
-        "max_dd": stats['max_dd'].item(),
-        "trades": int(stats['total_trades'])
+        "total_return": _get('Total Return [%]') / 100,
+        "sharpe": _get('Sharpe Ratio'),
+        "max_dd": _get('Max Drawdown [%]') / 100,
+        "win_rate": _get('Win Rate [%]') / 100,
+        "trades": int(_get('Total Trades', 0)),
     }

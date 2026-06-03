@@ -21,7 +21,10 @@ class CloudDataFetcher:
             'enableRateLimit': True,
         })
         if settings.deployment_mode == "paper":
-            self.exchange.set_sandbox_mode(True)
+            try:
+                self.exchange.set_sandbox_mode(True)
+            except Exception:
+                pass  # not all exchanges support sandbox mode
 
     def fetch_and_upload(self, symbol: str, timeframe: str = '1h', limit: int = 1000) -> str:
         """Fetch OHLCV data from exchange and upload directly to S3 as parquet."""

@@ -5,6 +5,18 @@
 builder = "dockerfile"
 
 [[services]]
+name = "trading-api"
+dockerfile = "Dockerfile.api"
+
+[services.deploy]
+healthcheckPath = "/dashboard"
+healthcheckTimeout = 60
+restartPolicyType = "on_failure"
+
+[services.variables]
+PORT = "8000"
+
+[[services]]
 name = "market-data"
 dockerfile = "services/market_data/Dockerfile"
 
