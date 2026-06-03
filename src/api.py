@@ -10,7 +10,10 @@ from src.backtest.engine import run_backtest
 from src.trade.order_manager import OrderManager
 from src.trade.strategy_engine import StrategyEngine
 from src.trade.config import Settings
-from src.risk import DailyLossCap
+from src.trade.risk_manager import DailyLossCap
+from src.scheduler.auto_retrain import CloudRetrainScheduler
+from fastapi.responses import HTMLResponse
+import threading
 
 # Load settings
 settings = Settings()
@@ -22,8 +25,9 @@ order_manager = OrderManager(
     secret=settings.api_secret,
 )
 strategy_engine = StrategyEngine(symbol=settings.default_symbol)
-# Scale daily loss cap (percentage of a base 10,000 unit capital for example)
-risk_manager = DailyLossCap(loss_cap=settings.daily_loss_cap_pct * 10000)
+# Scale daily loss cap 
+risk_manager = DailyLossCap(daily_loss_cap_pct=settings.daily_loss_cap_pct, initial_equity=10000.0)
+scheduler = CloudRetrainScheduler(settings)
 
 app = FastAPI(title="Trading AI Multimodal Service")
 
@@ -43,9 +47,8 @@ async def execute(file: UploadFile = File(...)):
         if not strategy_engine.validate(backtest_res):
             raise HTTPException(status_code=403, detail="Strategy validation failed. Trade aborted.")
         # Risk check (daily loss cap)
-        pnl = backtest_res.get("total_return", 0) * 1000
-        timestamp = datetime.datetime.utcnow().isoformat() + "Z"
-        if not risk_manager.update(timestamp, pnl):
+        current_equity = 10000.0 + backtest_res.get("total_return", 0) * 10000
+        if risk_manager.update_equity(current_equity):
             raise HTTPException(status_code=403, detail="Daily loss cap exceeded. Trading halted.")
         # Decision making
         order_spec = strategy_engine.decide(backtest_res, data)
@@ -69,5 +72,38 @@ async def run(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/dashboard", response_class=HTMLResponse)
+async def dashboard():
+    html_content = """
+    <html>
+        <head>
+            <title>Trading AI Dashboard</title>
+            <style>
+                body { font-family: Arial, sans-serif; background: #121212; color: #fff; padding: 20px; }
+                .card { background: #1e1e1e; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+                h1 { color: #4caf50; }
+            </style>
+        </head>
+        <body>
+            <h1>Trading AI Agent Dashboard</h1>
+            <div class="card">
+                <h2>Risk Status</h2>
+                <p>Trading Halted: {}</p>
+                <p>Current Equity: ${:.2f}</p>
+            </div>
+        </body>
+    </html>
+    """.format(risk_manager.halt_trading, risk_manager.current_equity)
+    return HTMLResponse(content=html_content)
+
+@app.on_event("startup")
+def startup_event():
+    # Start background scheduler
+    scheduler.start()
+
+@app.on_event("shutdown")
+def shutdown_event():
+    scheduler.stop()
+
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run("src.api:app", host="0.0.0.0", port=8000, reload=True)

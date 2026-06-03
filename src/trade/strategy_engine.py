@@ -51,6 +51,9 @@ class StrategyEngine:
         long (positive) or short (negative). It respects ``default_size`` and adds
         a trailing stop‑loss based on the entry price.
         """
+        if not self.validate(backtest_res):
+            return {"side": None, "reason": "validation_failed"}
+
         total_ret = backtest_res.get("total_return", 0)
         if total_ret > 0:
             side = "buy"

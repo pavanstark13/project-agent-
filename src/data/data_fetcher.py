@@ -1,69 +1,49 @@
-import os
+import io
+import ccxt
+import boto3
 import pandas as pd
-from datetime import datetime, timedelta
+from typing import Optional, List
+from src.trade.config import Settings
 
-# Optional imports guarded to avoid errors if packages missing
-try:
-    import ccxt
-except ImportError:
-    ccxt = None
-try:
-    import yfinance as yf
-except ImportError:
-    yf = None
-
-class DataFetcher:
-    """Fetch OHLCV data for a given symbol using the configured data source.
-
-    The data source is read from the Settings configuration ("ccxt" or "yfinance").
-    For crypto symbols (e.g., "BTC/USDT") it uses ccxt and Binance futures testnet.
-    For equity symbols (e.g., "AAPL") it uses yfinance.
-    """
-
-    def __init__(self, settings):
+class CloudDataFetcher:
+    def __init__(self, settings: Settings):
         self.settings = settings
-        self.source = settings.data_source.lower()
-        if self.source == "ccxt" and ccxt is None:
-            raise RuntimeError("ccxt package is required for ccxt data source.")
-        if self.source == "yfinance" and yf is None:
-            raise RuntimeError("yfinance package is required for yfinance data source.")
-        if self.source == "ccxt":
-            # Initialise Binance (testnet) exchange via ccxt
-            self.exchange = getattr(ccxt, settings.exchange_name)({
-                "apiKey": settings.api_key,
-                "secret": settings.api_secret,
-                "enableRateLimit": True,
-            })
-            # Ensure we are on testnet if the user wants it
-            if getattr(self.exchange, "has", {}).get("test"):
-                self.exchange.set_sandbox_mode(True)
-        else:
-            self.exchange = None
+        self.s3_client = boto3.client(
+            's3',
+            aws_access_key_id=settings.aws_access_key_id,
+            aws_secret_access_key=settings.aws_secret_access_key,
+            region_name=settings.aws_region
+        )
+        self.bucket = settings.s3_bucket_name
+        self.exchange = getattr(ccxt, settings.exchange_name)({
+            'apiKey': settings.api_key,
+            'secret': settings.api_secret,
+            'enableRateLimit': True,
+        })
+        if settings.deployment_mode == "paper":
+            self.exchange.set_sandbox_mode(True)
 
-    def fetch(self, symbol: str, timeframe: str = "1h", lookback_hours: int = 24):
-        """Return a pandas DataFrame with OHLCV data.
+    def fetch_and_upload(self, symbol: str, timeframe: str = '1h', limit: int = 1000) -> str:
+        """Fetch OHLCV data from exchange and upload directly to S3 as parquet."""
+        ohlcv = self.exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
+        df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+        
+        # Write to in-memory parquet buffer
+        buffer = io.BytesIO()
+        df.to_parquet(buffer, index=False)
+        buffer.seek(0)
+        
+        # Upload to S3
+        file_key = f"market_data/{symbol.replace('/', '_')}_{timeframe}.parquet"
+        self.s3_client.upload_fileobj(buffer, self.bucket, file_key)
+        return file_key
 
-        Parameters
-        ----------
-        symbol: str
-            Trading pair or ticker.
-        timeframe: str, default "1h"
-            CCXT timeframe string (e.g., "1h", "5m"). For yfinance we use the same string when possible.
-        lookback_hours: int, default 24
-            How many hours of data to retrieve.
-        """
-        end_ts = int(datetime.utcnow().timestamp() * 1000)
-        start_ts = end_ts - lookback_hours * 60 * 60 * 1000
-        if self.source == "ccxt":
-            # ccxt fetch_ohlcv expects milliseconds timestamps
-            ohlcv = self.exchange.fetch_ohlcv(symbol, timeframe=timeframe, since=start_ts, limit=None)
-            df = pd.DataFrame(ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
-            df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
-            return df
-        else:
-            # yfinance works with period strings; we convert lookback_hours
-            period = f"{lookback_hours}h"
-            ticker = yf.Ticker(symbol)
-            hist = ticker.history(interval=timeframe, period=period)
-            hist = hist.reset_index().rename(columns={"Datetime": "timestamp"})
-            return hist
+    def download_data(self, symbol: str, timeframe: str = '1h') -> pd.DataFrame:
+        """Download historical parquet data from S3 to a pandas DataFrame."""
+        file_key = f"market_data/{symbol.replace('/', '_')}_{timeframe}.parquet"
+        buffer = io.BytesIO()
+        self.s3_client.download_fileobj(self.bucket, file_key, buffer)
+        buffer.seek(0)
+        df = pd.read_parquet(buffer)
+        return df

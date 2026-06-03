@@ -31,6 +31,9 @@ dependencies = [
     "pytesseract>=0.3.10",
     "vectorbt>=0.26.0",
     "ccxt>=4.3.95",
+    "boto3>=1.34.0",
+    "apscheduler>=3.10.0",
+    "pandas>=2.0.0",
 ]
 
 [project.optional-dependencies]
